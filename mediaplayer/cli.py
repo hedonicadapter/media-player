@@ -6,7 +6,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import shutil
 import subprocess
 import sys
 import time
@@ -25,25 +24,34 @@ def _daemon_up(sock_path: str) -> bool:
         return False
 
 
+def _log_path(sock_path: str) -> str:
+    return os.path.join(os.path.dirname(sock_path) or ".", "mediaplayer-daemon.log")
+
+
+def _log_tail(sock_path: str, n: int = 20) -> str:
+    try:
+        with open(_log_path(sock_path), "r", errors="replace") as f:
+            return "".join(f.readlines()[-n:]).rstrip()
+    except OSError:
+        return "(no daemon log)"
+
+
 def ensure_daemon(sock_path: str, video: bool = True) -> bool:
     if _daemon_up(sock_path):
         return True
-    log_dir = os.path.dirname(sock_path) or "."
-    log = open(os.path.join(log_dir, "mediaplayer-daemon.log"), "ab")
-    # Prefer the installed console script (correctly wrapped under nix/pip);
-    # fall back to the module for uninstalled/dev use.
-    daemon_bin = shutil.which("mediaplayer-daemon")
-    if daemon_bin:
-        cmd = [daemon_bin, "--socket", sock_path]
-    else:
-        cmd = [sys.executable, "-m", "mediaplayer.daemon", "--socket", sock_path]
+    log = open(_log_path(sock_path), "ab")
+    # Launch via the module: sys.executable already has the package importable
+    # under pip, venv, the dev shim, and nix (NIX_PYTHONPATH is inherited). This
+    # is the portable path; a wrapped console script is not needed and detaching
+    # one under nix proved unreliable.
+    cmd = [sys.executable, "-m", "mediaplayer.daemon", "--socket", sock_path]
     if not video:
         cmd.append("--no-video")
     subprocess.Popen(
         cmd, stdout=log, stderr=log, start_new_session=True,
         close_fds=True, cwd=os.getcwd(),
     )
-    deadline = time.time() + 5.0
+    deadline = time.time() + 8.0
     while time.time() < deadline:
         if _daemon_up(sock_path):
             return True
@@ -115,7 +123,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command in _AUTOSTART:
         if not ensure_daemon(sock, video=video):
-            print("error: could not start daemon (see mediaplayer-daemon.log)", file=sys.stderr)
+            print(f"error: could not start daemon ({_log_path(sock)})", file=sys.stderr)
+            print("--- daemon log tail ---", file=sys.stderr)
+            print(_log_tail(sock), file=sys.stderr)
             return 1
         if args.command == "ensure-daemon":
             return _emit({"ok": True, "started": True}, args.json)

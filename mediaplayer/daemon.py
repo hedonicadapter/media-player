@@ -33,8 +33,10 @@ class Controller:
         self.lock = threading.RLock()
         self.backends = backend_factory(self._on_eof)
         self._active: Backend | None = None
-        # Pre-start engines so the first play has no cold-start latency (which
-        # otherwise blocks the play request past the client's timeout).
+
+    def warm_all(self) -> None:
+        """Pre-start engines so the first play has no cold-start latency. Called
+        after the control socket is listening so nothing here can delay bind."""
         for b in set(self.backends.values()):
             try:
                 b.warm()
@@ -182,6 +184,7 @@ class Server:
         self._listen.listen(8)
         self._listen.settimeout(0.5)
         self.running = True
+        self.controller.warm_all()  # socket is live; warm engines in background
 
         while self.running:
             try:
