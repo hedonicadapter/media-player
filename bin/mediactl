@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Thin wrapper so hooks can call an absolute path without activating a venv.
+# Works uninstalled: it puts this checkout on PYTHONPATH. If you `pip install -e .`
+# you can call the `mediactl` console script directly instead.
+set -euo pipefail
+REPO="${MEDIAPLAYER_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+export PYTHONPATH="${REPO}${PYTHONPATH:+:$PYTHONPATH}"
+exec "${PYTHON:-python3}" -m mediaplayer.cli "$@"

@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mediaplayer"
+version = "0.1.0"
+description = "Agnostic media player daemon — queue YouTube/TikTok/audiobooks (Spotify pinned), drive from Claude Code hooks"
+requires-python = ">=3.9"
+dependencies = []  # stdlib only; mpv + yt-dlp are external binaries
+
+[project.scripts]
+mediactl = "mediaplayer.cli:main"
+mediaplayer-daemon = "mediaplayer.daemon:main"
+
+[tool.setuptools.packages.find]
+include = ["mediaplayer*"]

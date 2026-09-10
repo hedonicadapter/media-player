@@ -1,0 +1,33 @@
+{
+  "//": "Sample Claude Code hooks. Merge the 'hooks' block into your ~/.claude/settings.json (global) or a project .claude/settings.json. Replace /ABS/PATH with this checkout. Commands are silenced and never block the turn.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          { "type": "command", "command": "/ABS/PATH/media-player/bin/mediactl ensure-daemon >/dev/null 2>&1 || true" }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          { "type": "command", "command": "/ABS/PATH/media-player/bin/mediactl play >/dev/null 2>&1 || true" }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          { "type": "command", "command": "/ABS/PATH/media-player/bin/mediactl pause >/dev/null 2>&1 || true" }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "hooks": [
+          { "type": "command", "command": "/ABS/PATH/media-player/bin/mediactl pause >/dev/null 2>&1 || true" }
+        ]
+      }
+    ]
+  }
+}
