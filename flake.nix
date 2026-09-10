@@ -30,6 +30,7 @@
           checkPhase = ''
             runHook preCheck
             python tests/test_controller.py
+            python tests/test_autostart.py
             runHook postCheck
           '';
 

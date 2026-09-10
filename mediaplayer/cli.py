@@ -9,6 +9,7 @@ import os
 import subprocess
 import sys
 import time
+import traceback
 
 from .protocol import default_sock_path, request
 
@@ -36,21 +37,61 @@ def _log_tail(sock_path: str, n: int = 20) -> str:
         return "(no daemon log)"
 
 
+def _daemon_argv(sock_path: str, video: bool) -> list[str]:
+    argv = ["--socket", sock_path]
+    if not video:
+        argv.append("--no-video")
+    return argv
+
+
+def _fork_daemon(sock_path: str, video: bool) -> None:
+    """Double-fork and run the daemon in-process. The running client already has
+    `mediaplayer` imported, so the child inherits it — no interpreter re-invoke,
+    no PATH/PYTHONPATH dependency (which broke under nix's `nix run`)."""
+    pid = os.fork()
+    if pid > 0:
+        try:
+            os.waitpid(pid, 0)  # reap intermediate child (exits right after 2nd fork)
+        except ChildProcessError:
+            pass
+        return  # parent: caller polls for the socket
+    try:
+        os.setsid()
+        if os.fork() > 0:
+            os._exit(0)  # first child exits; grandchild reparents to init
+        # Grandchild = daemon. Detach stdio to the log file.
+        log_fd = os.open(_log_path(sock_path), os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+        null_fd = os.open(os.devnull, os.O_RDONLY)
+        os.dup2(null_fd, 0)
+        os.dup2(log_fd, 1)
+        os.dup2(log_fd, 2)
+        from .daemon import main as daemon_main
+
+        daemon_main(_daemon_argv(sock_path, video))
+    except BaseException:
+        traceback.print_exc()
+        os._exit(1)
+    os._exit(0)
+
+
+def _subprocess_daemon(sock_path: str, video: bool) -> None:
+    """Fallback for platforms without fork: re-invoke the interpreter, forcing the
+    package onto PYTHONPATH so a bare interpreter can import it."""
+    log = open(_log_path(sock_path), "ab")
+    pkg_parent = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    env = dict(os.environ)
+    env["PYTHONPATH"] = pkg_parent + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
+    cmd = [sys.executable, "-m", "mediaplayer.daemon", *_daemon_argv(sock_path, video)]
+    subprocess.Popen(cmd, stdout=log, stderr=log, start_new_session=True, close_fds=True, env=env)
+
+
 def ensure_daemon(sock_path: str, video: bool = True) -> bool:
     if _daemon_up(sock_path):
         return True
-    log = open(_log_path(sock_path), "ab")
-    # Launch via the module: sys.executable already has the package importable
-    # under pip, venv, the dev shim, and nix (NIX_PYTHONPATH is inherited). This
-    # is the portable path; a wrapped console script is not needed and detaching
-    # one under nix proved unreliable.
-    cmd = [sys.executable, "-m", "mediaplayer.daemon", "--socket", sock_path]
-    if not video:
-        cmd.append("--no-video")
-    subprocess.Popen(
-        cmd, stdout=log, stderr=log, start_new_session=True,
-        close_fds=True, cwd=os.getcwd(),
-    )
+    if hasattr(os, "fork"):
+        _fork_daemon(sock_path, video)
+    else:
+        _subprocess_daemon(sock_path, video)
     deadline = time.time() + 8.0
     while time.time() < deadline:
         if _daemon_up(sock_path):
