@@ -6,7 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import socket
+import shutil
 import subprocess
 import sys
 import time
@@ -30,7 +30,13 @@ def ensure_daemon(sock_path: str, video: bool = True) -> bool:
         return True
     log_dir = os.path.dirname(sock_path) or "."
     log = open(os.path.join(log_dir, "mediaplayer-daemon.log"), "ab")
-    cmd = [sys.executable, "-m", "mediaplayer.daemon", "--socket", sock_path]
+    # Prefer the installed console script (correctly wrapped under nix/pip);
+    # fall back to the module for uninstalled/dev use.
+    daemon_bin = shutil.which("mediaplayer-daemon")
+    if daemon_bin:
+        cmd = [daemon_bin, "--socket", sock_path]
+    else:
+        cmd = [sys.executable, "-m", "mediaplayer.daemon", "--socket", sock_path]
     if not video:
         cmd.append("--no-video")
     subprocess.Popen(

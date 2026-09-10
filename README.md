@@ -39,6 +39,24 @@ the mpv engine.
 The daemon runs without them; it only errors when you actually play a source
 whose engine is missing.
 
+## Run with Nix
+
+The flake bundles Python + mpv + yt-dlp, so nothing else is needed:
+
+```bash
+nix run github:hedonicadapter/media-player -- enqueue "https://youtu.be/dQw4w9WgXcQ"
+nix run github:hedonicadapter/media-player -- play
+nix run github:hedonicadapter/media-player -- status
+nix run github:hedonicadapter/media-player#daemon -- --no-video   # run the daemon directly
+```
+
+`nix run` (no `#`) is `mediactl`; `#daemon` is the daemon. Install to your profile
+with `nix profile install github:hedonicadapter/media-player` to get `mediactl` on
+PATH, or drop into a dev shell with `nix develop`.
+
+For hooks, point the sample config at the installed binary (e.g.
+`~/.nix-profile/bin/mediactl`) instead of `bin/mediactl`.
+
 ## Use
 
 ```bash
