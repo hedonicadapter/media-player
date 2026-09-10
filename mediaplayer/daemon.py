@@ -33,6 +33,13 @@ class Controller:
         self.lock = threading.RLock()
         self.backends = backend_factory(self._on_eof)
         self._active: Backend | None = None
+        # Pre-start engines so the first play has no cold-start latency (which
+        # otherwise blocks the play request past the client's timeout).
+        for b in set(self.backends.values()):
+            try:
+                b.warm()
+            except Exception:
+                pass
 
     def _route(self, source: str) -> Backend:
         return self.backends[sources.backend_name(source)]

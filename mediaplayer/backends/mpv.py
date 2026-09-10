@@ -38,13 +38,30 @@ class MpvBackend(Backend):
         self._proc: subprocess.Popen | None = None
         self._sock: socket.socket | None = None
         self._send_lock = threading.Lock()
+        self._start_lock = threading.Lock()
         self._reader: threading.Thread | None = None
         self._current_uri: str = ""
 
     # --- lifecycle -------------------------------------------------------
 
+    def warm(self) -> None:
+        """Pre-spawn mpv in the background so the first play is instant. Non-fatal:
+        if mpv is missing, load() surfaces the error later."""
+
+        def _try():
+            try:
+                self._ensure_started()
+            except Exception:
+                pass
+
+        threading.Thread(target=_try, daemon=True).start()
+
     def _ensure_started(self) -> None:
-        if self._proc and self._proc.poll() is None:
+        with self._start_lock:
+            self._ensure_started_locked()
+
+    def _ensure_started_locked(self) -> None:
+        if self._proc and self._proc.poll() is None and self._sock is not None:
             return
         if shutil.which(self._mpv_bin) is None:
             raise RuntimeError(

@@ -32,6 +32,10 @@ class Backend(ABC):
     def stop(self) -> None:
         """Stop and unload. Must not trigger on_eof."""
 
+    def warm(self) -> None:
+        """Optionally pre-start the engine so the first play has no cold-start
+        latency. Must be non-blocking and non-fatal. Default: no-op."""
+
     def status(self) -> dict:
         return {}
 

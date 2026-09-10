@@ -125,7 +125,9 @@ def main(argv: list[str] | None = None) -> int:
         req["uri"] = args.uri
 
     try:
-        resp = request(sock, req)
+        # Generous timeout: a cold first play may still spin up mpv inside the
+        # handler before the warm start finishes.
+        resp = request(sock, req, timeout=20.0)
     except (OSError, ValueError) as e:
         # A non-autostart command against a dead daemon: report cleanly.
         print(f"error: daemon not reachable ({e})", file=sys.stderr)
