@@ -31,6 +31,7 @@
             runHook preCheck
             python tests/test_controller.py
             python tests/test_autostart.py
+            python tests/test_http_api.py
             runHook postCheck
           '';
 

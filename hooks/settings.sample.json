@@ -1,10 +1,11 @@
 {
   "//": "Sample Claude Code hooks. Merge the 'hooks' block into your ~/.claude/settings.json (global) or a project .claude/settings.json. Replace /ABS/PATH with this checkout. Commands are silenced and never block the turn.",
+  "//http": "SessionStart exports MEDIAPLAYER_HTTP_PORT so the autostarted daemon also opens the localhost HTTP endpoint (POST /play,/pause,...) for an external trigger. Drop the env var if you only drive it via the mediactl hooks below.",
   "hooks": {
     "SessionStart": [
       {
         "hooks": [
-          { "type": "command", "command": "/ABS/PATH/media-player/bin/mediactl ensure-daemon >/dev/null 2>&1 || true" }
+          { "type": "command", "command": "MEDIAPLAYER_HTTP_PORT=8730 /ABS/PATH/media-player/bin/mediactl ensure-daemon >/dev/null 2>&1 || true" }
         ]
       }
     ],

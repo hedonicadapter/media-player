@@ -138,11 +138,13 @@ class Controller:
 
 
 class Server:
-    def __init__(self, sock_path: str, controller: Controller):
+    def __init__(self, sock_path: str, controller: Controller, http: dict | None = None):
         self.sock_path = sock_path
         self.controller = controller
+        self.http = http  # {"host","port","token"} or None
         self.running = False
         self._listen: socket.socket | None = None
+        self._httpd = None
 
     def _dispatch(self, req: dict) -> dict:
         cmd = req.get("cmd")
@@ -185,6 +187,7 @@ class Server:
         self._listen.settimeout(0.5)
         self.running = True
         self.controller.warm_all()  # socket is live; warm engines in background
+        self._start_http()
 
         while self.running:
             try:
@@ -208,7 +211,25 @@ class Server:
 
         self._cleanup()
 
+    def _start_http(self) -> None:
+        if not self.http:
+            return
+        from .http_api import start_http
+
+        try:
+            self._httpd = start_http(self.controller, **self.http)
+            print(
+                f"http control on {self.http['host']}:{self.http['port']}"
+                + ("" if self.http.get("token") else " (no token)"),
+                file=sys.stderr,
+            )
+        except OSError as e:
+            print(f"http control failed to bind: {e}", file=sys.stderr)
+
     def _cleanup(self) -> None:
+        if self._httpd:
+            self._httpd.shutdown()
+            self._httpd.server_close()
         self.controller.shutdown()
         if self._listen:
             self._listen.close()
@@ -225,11 +246,30 @@ def _fake_factory(on_eof):
     return {"mpv": fb, "spotify": fb}
 
 
+def _http_config(args) -> dict | None:
+    """Resolve HTTP control config from flags, falling back to env. Enabled when
+    --http/--http-port is given or MEDIAPLAYER_HTTP_PORT is set, so an autostarted
+    (forked) daemon inherits it from the environment."""
+    env = os.environ
+    port = args.http_port or (int(env["MEDIAPLAYER_HTTP_PORT"]) if env.get("MEDIAPLAYER_HTTP_PORT") else 0)
+    if not args.http and not port:
+        return None
+    return {
+        "host": args.http_host or env.get("MEDIAPLAYER_HTTP_HOST", "127.0.0.1"),
+        "port": port or 8730,
+        "token": args.http_token or env.get("MEDIAPLAYER_HTTP_TOKEN") or None,
+    }
+
+
 def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(prog="mediaplayer-daemon")
     p.add_argument("--socket", default=default_sock_path())
     p.add_argument("--no-video", action="store_true", help="audio only (mpv --no-video)")
     p.add_argument("--fake", action="store_true", help="use in-process fake backend")
+    p.add_argument("--http", action="store_true", help="enable localhost HTTP control on port 8730")
+    p.add_argument("--http-host", default="", help="HTTP bind host (default 127.0.0.1)")
+    p.add_argument("--http-port", type=int, default=0, help="HTTP port (implies --http)")
+    p.add_argument("--http-token", default="", help="require this token (X-Token header or ?token=)")
     args = p.parse_args(argv)
 
     video = not args.no_video
@@ -239,7 +279,7 @@ def main(argv: list[str] | None = None) -> int:
         factory = lambda on_eof: build_backends(on_eof, video=video)  # noqa: E731
 
     controller = Controller(factory)
-    server = Server(args.socket, controller)
+    server = Server(args.socket, controller, http=_http_config(args))
 
     def _sig(*_):
         server.running = False

@@ -98,14 +98,51 @@ copy the `hooks` block into `~/.claude/settings.json` (global) or a project
 `.claude/settings.json`, and replace `/ABS/PATH` with this checkout. Commands are
 silenced and `|| true`'d so they never block or delay a turn.
 
+## External trigger (HTTP)
+
+For a trigger that speaks HTTP instead of running a command, the daemon can open
+a **localhost** control endpoint. It's off by default — a port only opens when
+you enable it:
+
+```bash
+# enable when starting the daemon directly …
+mediaplayer-daemon --http                 # port 8730
+# … or via env, so an autostarted (hook/forked) daemon inherits it:
+export MEDIAPLAYER_HTTP_PORT=8730
+```
+
+Then your external signal just hits a URL — GET or POST, JSON back:
+
+```bash
+curl -X POST localhost:8730/play          # waiting on the LLM → play
+curl -X POST localhost:8730/pause         # finished → pause
+curl -X POST 'localhost:8730/enqueue?uri=https://youtu.be/…'
+curl localhost:8730/status
+```
+
+Routes: `/play /pause /toggle /next /stop /clear /status /enqueue?uri=…`.
+
+Since an HTTP trigger can't autostart the daemon, make sure it's already up with
+HTTP on — e.g. a `SessionStart` hook running `mediactl ensure-daemon` with
+`MEDIAPLAYER_HTTP_PORT` exported, or run `mediaplayer-daemon --http` yourself.
+
+**Security:** binds `127.0.0.1` only, no auth by default (any local process can
+drive it). To reach it from another host, set `--http-host 0.0.0.0` **and** a
+token (`--http-token …` or `MEDIAPLAYER_HTTP_TOKEN`), sent as an `X-Token` header
+or `?token=`. The token still crosses the network in the clear — prefer an SSH
+tunnel over exposing the port.
+
 ## Tests
 
 ```bash
-python3 tests/test_controller.py     # state machine + auto-advance, no mpv needed
+python3 tests/test_controller.py       # state machine + auto-advance
+python3 tests/test_autostart.py        # in-process fork autostart
+python3 tests/test_http_api.py         # HTTP control surface
+python3 tests/test_mpv_integration.py  # real MpvBackend vs a fake mpv IPC binary
 ```
 
-Uses an in-process fake backend — no mpv, no network. Run the daemon itself with
-`--fake` to exercise the socket API the same way.
+All use an in-process fake backend — no mpv, no outbound network. Run the daemon
+itself with `--fake` to exercise the socket API the same way.
 
 ## Roadmap / Spotify
 
