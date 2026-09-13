@@ -11,9 +11,11 @@
       let
         pkgs = import nixpkgs { inherit system; };
 
-        # Runtime binaries the mpv backend shells out to. yt-dlp resolves
-        # YouTube/TikTok; both are put on the wrapped scripts' PATH.
-        runtimeDeps = [ pkgs.mpv pkgs.yt-dlp ];
+        # Runtime binaries the backends shell out to. yt-dlp resolves
+        # YouTube/TikTok; playerctl (Linux/MPRIS) drives system-wide play/pause
+        # for the empty-queue path. All put on the wrapped scripts' PATH.
+        runtimeDeps = [ pkgs.mpv pkgs.yt-dlp ]
+          ++ pkgs.lib.optional pkgs.stdenv.isLinux pkgs.playerctl;
 
         mediaplayer = pkgs.python3Packages.buildPythonApplication {
           pname = "mediaplayer";
@@ -30,6 +32,8 @@
           checkPhase = ''
             runHook preCheck
             python tests/test_controller.py
+            python tests/test_system_control.py
+            python tests/test_system_routing.py
             python tests/test_autostart.py
             python tests/test_http_api.py
             runHook postCheck

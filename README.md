@@ -132,10 +132,39 @@ token (`--http-token …` or `MEDIAPLAYER_HTTP_TOKEN`), sent as an `X-Token` hea
 or `?token=`. The token still crosses the network in the clear — prefer an SSH
 tunnel over exposing the port.
 
+## System-wide play/pause (Spotify & anything else)
+
+Instead of integrating each service's API, the player can drive the **OS media
+session** — pause/resume whatever app is playing. That's the agnostic path for
+Spotify (no Premium/OAuth/DRM dance) and it survives migrating Spotify → Tidal →
+Apple Music → a self-hosted server.
+
+**Auto routing** — one daemon, decided per command:
+
+- Queue has items → drive the internal **mpv** engine (queue, auto-advance).
+- Queue empty → forward `play`/`pause`/`next` to the **system player**.
+
+So to control Spotify: don't queue anything — just play in Spotify, and your
+`play`/`pause` (hooks, HTTP, CLI) toggle it.
+
+Drivers, auto-detected:
+
+| OS | Tool | Notes |
+|---|---|---|
+| Linux | `playerctl` (MPRIS) | most-recently-active player; scope with `MEDIAPLAYER_PLAYERCTL_PLAYER=spotify` |
+| macOS | `nowplaying-cli` | true system Now Playing; `brew install nowplaying-cli` |
+| macOS | AppleScript (fallback) | per-app; targets Spotify/Music, override `MEDIAPLAYER_MAC_PLAYER` |
+
+The Nix flake bundles `playerctl` on Linux. **Caveat:** system control is global —
+if mpv and Spotify both play they fight; scope the player (Linux) or rely on Auto
+routing keeping system control to the empty-queue case.
+
 ## Tests
 
 ```bash
 python3 tests/test_controller.py       # state machine + auto-advance
+python3 tests/test_system_control.py   # driver detection + argv (playerctl/mac)
+python3 tests/test_system_routing.py   # Auto routing internal vs system
 python3 tests/test_autostart.py        # in-process fork autostart
 python3 tests/test_http_api.py         # HTTP control surface
 python3 tests/test_mpv_integration.py  # real MpvBackend vs a fake mpv IPC binary
@@ -146,15 +175,13 @@ itself with `--fake` to exercise the socket API the same way.
 
 ## Roadmap / Spotify
 
-Spotify can't be driven like mpv — you can't legally pull raw audio. Playback has
-to run through a Spotify **Connect** device (the desktop app, or headless
-`librespot`/`spotifyd`), commanded via the Web API, and it needs a **Premium**
-account + OAuth. Planned `SpotifyBackend`:
+The agnostic way to control Spotify is **system-wide play/pause** (above) — no
+Premium, OAuth, or DRM. A queue-aware `SpotifyBackend` (resolve a playlist via
+the Web API, drive a Connect device) is still possible later for people who want
+Spotify *tracks queued alongside* YouTube/audiobooks, but it needs Premium +
+OAuth and isn't required for the pause/resume-while-waiting use case; the
+`spotify` URI backend stays pinned until then.
 
-1. OAuth (Authorization Code + PKCE), cache the refresh token.
-2. Resolve playlist URI → track list (Web API).
-3. Pick an active Connect device.
-4. Control via `PUT /me/player/play`, `/pause`, `POST /me/player/next`.
-
-Other likely additions: live title/position in `status`, per-item audio/video
-override, shuffle, a debounce so back-to-back turns don't stutter.
+Other likely additions: persist queue + position across restarts, a default
+queue loaded at startup, live title/position in `status`, per-item audio/video
+override, shuffle.

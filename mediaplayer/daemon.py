@@ -19,20 +19,30 @@ from .backends import build_backends
 from .backends.base import Backend
 from .protocol import default_sock_path, recv_json, send_json
 from .queue import Queue
+from .system_control import SystemController
 
 IDLE, PLAYING, PAUSED = "idle", "playing", "paused"
+INTERNAL, SYSTEM = "internal", "system"
 
 
 class Controller:
     """Queue + state machine. Thread-safe: control thread and backend eof thread
-    both mutate through `lock`."""
+    both mutate through `lock`.
 
-    def __init__(self, backend_factory: Callable[[Callable[[], None]], dict[str, Backend]]):
+    Auto routing: with items queued, playback drives the internal mpv engine
+    (queue, auto-advance). With the queue empty, play/pause/next forward to the
+    OS media session (SystemController) so you can pause/resume Spotify or
+    whatever else is playing."""
+
+    def __init__(self, backend_factory, system: SystemController | None = None):
         self.q = Queue()
         self.state = IDLE
+        self.mode = INTERNAL  # which target the last play/next acted on
         self.lock = threading.RLock()
         self.backends = backend_factory(self._on_eof)
         self._active: Backend | None = None
+        self._last_system: dict = {}
+        self.system = system if system is not None else SystemController()
 
     def warm_all(self) -> None:
         """Pre-start engines so the first play has no cold-start latency. Called
@@ -61,8 +71,11 @@ class Controller:
     def play(self) -> dict:
         with self.lock:
             cur = self.q.current()
-            if cur is None:
+            if cur is None:  # nothing queued -> forward to the OS media session
+                self.mode = SYSTEM
+                self._last_system = self.system.play()
                 return self.status()
+            self.mode = INTERNAL
             if self.state == PLAYING:
                 return self.status()
             if self.state == PAUSED and self._active is not None:
@@ -74,6 +87,9 @@ class Controller:
 
     def pause(self) -> dict:
         with self.lock:
+            if self.mode == SYSTEM:
+                self._last_system = self.system.pause()
+                return self.status()
             if self.state == PLAYING and self._active is not None:
                 self._active.pause()
                 self.state = PAUSED
@@ -81,10 +97,18 @@ class Controller:
 
     def toggle(self) -> dict:
         with self.lock:
+            if self.mode == SYSTEM and self.q.current() is None:
+                self._last_system = self.system.toggle()
+                return self.status()
             return self.pause() if self.state == PLAYING else self.play()
 
     def next(self) -> dict:
         with self.lock:
+            if self.q.current() is None:  # queue empty/exhausted -> skip system track
+                self.mode = SYSTEM
+                self._last_system = self.system.next()
+                return self.status()
+            self.mode = INTERNAL
             nxt = self.q.advance()
             if nxt is not None:
                 self._load(nxt)
@@ -94,6 +118,9 @@ class Controller:
 
     def stop(self) -> dict:
         with self.lock:
+            if self.mode == SYSTEM:
+                self._last_system = self.system.pause()  # no universal "stop"; pause is closest
+                return self.status()
             self._stop_active()
             return self.status()
 
@@ -123,9 +150,11 @@ class Controller:
             return {
                 "ok": True,
                 "state": self.state,
+                "mode": self.mode,
                 "current": cur.to_dict() if cur else None,
                 "queue": self.q.to_dict(),
                 "backend": self._active.status() if self._active else {},
+                "system": {**self.system.describe(), "last": self._last_system},
             }
 
     def shutdown(self) -> None:
@@ -288,6 +317,11 @@ def main(argv: list[str] | None = None) -> int:
     signal.signal(signal.SIGINT, _sig)
 
     print(f"mediaplayer daemon {__version__} on {args.socket}", file=sys.stderr)
+    d = controller.system.describe()
+    print(
+        f"system media control: {d['tool']}" if d["available"] else "system media control: unavailable",
+        file=sys.stderr,
+    )
     server.serve()
     return 0
 

@@ -122,6 +122,16 @@ def _print_human(resp: dict) -> None:
     if "state" in resp:
         state = resp["state"]
         cur = resp.get("current")
+        mode = resp.get("mode", "internal")
+        sysd = resp.get("system", {})
+        if mode == "system":
+            tool = sysd.get("tool") or "no controller"
+            last = sysd.get("last", {}).get("action")
+            line = f"[system → {tool}]" + (f" {last}" if last else "")
+            if not sysd.get("available"):
+                line += "  (unavailable — install playerctl / nowplaying-cli)"
+            print(line)
+            return
         line = f"[{state}]"
         if cur:
             line += f" #{cur['id']} [{cur['source']}] {cur['title']}"
