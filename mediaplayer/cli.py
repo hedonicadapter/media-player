@@ -17,6 +17,26 @@ from .protocol import default_sock_path, request
 _AUTOSTART = {"play", "enqueue", "toggle", "ensure-daemon"}
 
 
+def tailscale_endpoint(port: int) -> str:
+    """Return this machine's MagicDNS HTTP control endpoint."""
+    try:
+        result = subprocess.run(
+            ["tailscale", "status", "--json"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        status = json.loads(result.stdout)
+        name = status["Self"]["DNSName"].rstrip(".")
+    except FileNotFoundError:
+        raise RuntimeError("tailscale is not installed or not on PATH") from None
+    except (subprocess.CalledProcessError, json.JSONDecodeError, KeyError, TypeError) as e:
+        raise RuntimeError(f"could not determine Tailscale hostname: {e}") from None
+    if not name:
+        raise RuntimeError("Tailscale MagicDNS is not available")
+    return f"http://{name}:{port}"
+
+
 def _daemon_up(sock_path: str) -> bool:
     try:
         resp = request(sock_path, {"cmd": "ping"}, timeout=1.0)
@@ -164,6 +184,8 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("ping", help="health check")
     sub.add_parser("ensure-daemon", help="start daemon if not running")
     sub.add_parser("shutdown", help="stop the daemon")
+    ts = sub.add_parser("tailscale-endpoint", help="print this device's OpenCode player endpoint")
+    ts.add_argument("--port", type=int, default=8730, help="HTTP control port (default: 8730)")
     return p
 
 
@@ -171,6 +193,18 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     sock = args.socket
     video = not args.no_video
+
+    if args.command == "tailscale-endpoint":
+        try:
+            endpoint = tailscale_endpoint(args.port)
+        except RuntimeError as e:
+            print(f"error: {e}", file=sys.stderr)
+            return 1
+        if args.json:
+            print(json.dumps({"endpoint": endpoint}))
+        else:
+            print(f"OPENCODE_MEDIA_PLAYER_ENDPOINTS={endpoint}")
+        return 0
 
     if args.command in _AUTOSTART:
         if not ensure_daemon(sock, video=video):

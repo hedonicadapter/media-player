@@ -132,6 +132,33 @@ token (`--http-token …` or `MEDIAPLAYER_HTTP_TOKEN`), sent as an `X-Token` hea
 or `?token=`. The token still crosses the network in the clear — prefer an SSH
 tunnel over exposing the port.
 
+### Tailscale + OpenCode
+
+For private control across devices, bind the HTTP endpoint to the Tailscale
+interface and require a token. The Nix package includes the Tailscale CLI on
+Linux, so it can print this device's MagicDNS endpoint:
+
+```bash
+export MEDIAPLAYER_HTTP_PORT=8730
+export MEDIAPLAYER_HTTP_HOST=0.0.0.0
+export MEDIAPLAYER_HTTP_TOKEN="$(openssl rand -hex 32)"
+nix run github:hedonicadapter/media-player -- ensure-daemon
+nix run github:hedonicadapter/media-player -- tailscale-endpoint
+# OPENCODE_MEDIA_PLAYER_ENDPOINTS=http://my-device.tailnet.ts.net:8730
+```
+
+On the machine running OpenCode, add the printed value and the same token to
+the environment that starts OpenCode. Comma-separate endpoints to control more
+than one device:
+
+```bash
+export OPENCODE_MEDIA_PLAYER_ENDPOINTS="http://my-device.tailnet.ts.net:8730"
+export OPENCODE_MEDIA_PLAYER_TOKEN="$MEDIAPLAYER_HTTP_TOKEN"
+```
+
+This requires MagicDNS. The daemon remains private to the Tailnet; do not
+expose its HTTP port through a public funnel or router port-forward.
+
 ## System-wide play/pause (Spotify & anything else)
 
 Instead of integrating each service's API, the player can drive the **OS media
