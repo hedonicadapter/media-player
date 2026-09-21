@@ -135,8 +135,8 @@ tunnel over exposing the port.
 ### Tailscale + OpenCode
 
 For private control across devices, bind the HTTP endpoint to the Tailscale
-interface and require a token. The Nix package includes the Tailscale CLI on
-Linux, so it can print this device's MagicDNS endpoint:
+interface and require a token. The Nix package includes the Tailscale CLI, so
+it can print this device's MagicDNS endpoint:
 
 ```bash
 export MEDIAPLAYER_HTTP_PORT=8730
