@@ -15,7 +15,7 @@
         # YouTube/TikTok; playerctl (Linux/MPRIS) drives system-wide play/pause
         # for the empty-queue path. All put on the wrapped scripts' PATH.
         runtimeDeps = [ pkgs.mpv pkgs.yt-dlp pkgs.tailscale ]
-          ++ pkgs.lib.optional pkgs.stdenv.isLinux pkgs.playerctl;
+          ++ pkgs.lib.optional pkgs.stdenv.hostPlatform.isLinux pkgs.playerctl;
 
         mediaplayer = pkgs.python3Packages.buildPythonApplication {
           pname = "mediaplayer";
@@ -72,7 +72,7 @@
 
         devShells.default = pkgs.mkShell {
           packages = [ pkgs.python3 pkgs.mpv pkgs.yt-dlp pkgs.tailscale ]
-            ++ pkgs.lib.optional pkgs.stdenv.isLinux pkgs.playerctl;
+            ++ pkgs.lib.optional pkgs.stdenv.hostPlatform.isLinux pkgs.playerctl;
         };
       });
 }

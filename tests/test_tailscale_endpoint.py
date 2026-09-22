@@ -24,6 +24,13 @@ def test_tailscale_endpoint_uses_magicdns_name():
     assert run.call_args.args[0] == ["tailscale", "status", "--json"]
 
 
+def test_tailscale_endpoint_uses_environment_override():
+    with patch.dict(os.environ, {"MEDIAPLAYER_TAILSCALE_DNS_NAME": "speaker.tailnet.ts.net."}):
+        with patch("mediaplayer.cli.subprocess.run") as run:
+            assert cli.tailscale_endpoint(9123) == "http://speaker.tailnet.ts.net:9123"
+    run.assert_not_called()
+
+
 def test_tailscale_endpoint_cli_output():
     output = StringIO()
     with patch("mediaplayer.cli.tailscale_endpoint", return_value="http://speaker.tailnet.ts.net:8730"):

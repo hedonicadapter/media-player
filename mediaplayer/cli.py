@@ -19,6 +19,9 @@ _AUTOSTART = {"play", "enqueue", "toggle", "ensure-daemon"}
 
 def tailscale_endpoint(port: int) -> str:
     """Return this machine's MagicDNS HTTP control endpoint."""
+    name = os.environ.get("MEDIAPLAYER_TAILSCALE_DNS_NAME", "").rstrip(".")
+    if name:
+        return f"http://{name}:{port}"
     try:
         result = subprocess.run(
             ["tailscale", "status", "--json"],

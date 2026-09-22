@@ -147,6 +147,14 @@ nix run github:hedonicadapter/media-player -- tailscale-endpoint
 # OPENCODE_MEDIA_PLAYER_ENDPOINTS=http://my-device.tailnet.ts.net:8730
 ```
 
+If the Nix-packaged `tailscale` command cannot connect to the host's
+`tailscaled`, set the MagicDNS name explicitly instead:
+
+```bash
+export MEDIAPLAYER_TAILSCALE_DNS_NAME="my-device.tailnet.ts.net"
+nix run github:hedonicadapter/media-player -- tailscale-endpoint
+```
+
 On the machine running OpenCode, add the printed value and the same token to
 the environment that starts OpenCode. Comma-separate endpoints to control more
 than one device:
